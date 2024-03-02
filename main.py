@@ -5,7 +5,9 @@ from torchvision.datasets import CIFAR10
 from torchvision.datasets.mnist import MNIST, FashionMNIST
 from torchvision.transforms.transforms import Compose, ToTensor, Normalize
 from torch.utils.data import DataLoader
+from torch.distributions import normal
 
+import random
 import einops
 import numpy as np
 import matplotlib.pyplot as plt
@@ -13,18 +15,42 @@ import matplotlib.pyplot as plt
 from argparse import ArgumentParser
 
 
-def showImage(imgs):
-    plt.figure(figsize=(10, 10))
+def showImage(imgs, size=(5, 5)):
+    plt.figure(figsize=size)
     imgs = einops.rearrange(imgs, 'b c h w -> b h w c')
     imgs = imgs.numpy().astype(np.float32)
 
     for i in range(25):
-        plt.subplot(5, 5, i+1)
-        plt.imshow(imgs[i])
+        plt.subplot(size[0], size[1], i+1)
+        plt.imshow(imgs[i], cmap='gray')
 
     plt.show()
 
+
+def addNoise(imgs, noiseScale, NOISE_STEP, count=25):
+    imgs = imgs[:count]
+
+    noise = torch.normal(mean=0.5, std=0.5, size=imgs.shape)
+    steps = torch.randint(low=0, high=NOISE_STEP, size=(count, ))
+
+    cur = noiseScale[steps]
+    nxt = noiseScale[steps+1]
+
+    cur = cur.reshape((-1,1,1,1))
+    nxt = nxt.reshape((-1,1,1,1))
+
+    curImg = imgs * (1-cur) + noise * cur
+    nxtImg = imgs * (1-nxt) + noise * nxt
+
+    return curImg, nxtImg
+
+
 def main():
+    SEED = 0
+    random.seed(0)
+    np.random.seed(SEED)
+    torch.manual_seed(SEED)
+
     parser = ArgumentParser()
     parser.add_argument(
         '--batch_size', type=int, default=128, help='Batch size'
@@ -50,13 +76,20 @@ def main():
     LEARNING_RATE = args['learning_rate']
 
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+    print(f'Device: {torch.cuda.get_device_name(0) if torch.cuda.is_available() else "cpu"}')
 
     transform = Compose([ToTensor(), Normalize(mean=[0.5], std=[0.5])])
     dataset = MNIST(root='./datasets', train=True, download=True, transform=transform)
     loader = DataLoader(dataset, batch_size=BATCH_SIZE, shuffle=True, num_workers=0)
 
     originImg, _ = next(iter(loader))
-    showImage(originImg)
+    # showImage(originImg)
+
+    noiseScale = torch.linspace(0, 1, NOISE_STEP + 1)
+
+    curImgs, curImgs = addNoise(originImg, noiseScale, NOISE_STEP)
+    # showImage(curImgs)
+    # showImage(curImgs)
 
 if __name__ == '__main__':
     main()
